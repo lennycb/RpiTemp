@@ -1,0 +1,80 @@
+#!/bin/bash
+
+python -c "import sys"
+	if [ sys.version_info.major == 3 ]
+	then
+		python3=true
+	else
+		python3=false
+	fi
+
+configFile="/u-boot/config.txt"
+overlayFile="/u-boot/overlays/w1-gpio.dtbo"
+reqFile="FileSets/requirements.txt"
+pluginFile="FileSets/plugins.txt"
+
+source "/data/SetupHelper/CommonResources"
+
+#prüfen und holen des ReleaseType
+get_setting() {
+    dbus-send --print-reply=literal --system --type=method_call \
+              --dest=com.victronenergy.settings \
+              /Settings/System/ReleaseType \
+              com.victronenergy.BusItem.GetValue |
+        awk '{print $3}'
+}
+
+#int to string
+feed=$(get_setting ReleaseType)
+	case $feed in
+		0) feed=release	;;
+		1) feed=candidate	;;
+		2) feed=testing	;;
+		3) feed=develop	;;
+		*) echo "Invalid release type, exit.";;
+	esac
+
+#prüfen ob ReleaseTyp in venus.conf überein stimmt, wenn nicht anpassen
+#danach opkg update
+if grep $feed /etc/opkg/venus.conf
+then
+	echo "Release $feed gefunden."
+	echo "beides gleich --> weiter mit opkg"
+	opkg update
+else
+	echo "ungleich, Release muss gesetzt werden!"
+	/opt/victronenergy/swupdate-scripts/set-feed.sh $feed
+	opkg update
+fi
+
+#Vorschlag der Victronseite https://github.com/victronenergy/venus/wiki/installing-additional-python-modules
+opkg install $(cat "$pluginFile")
+
+#neuste Installationsdatei für PIP holen und im Ordner /data speichern 
+if [ "$python3" = true ]
+then
+	curl https://bootstrap.pypa.io/get-pip.py -o /data/get-pip.py
+else
+	curl https://bootstrap.pypa.io/pip/2.7/get-pip.py -o /data/get-pip.py
+fi
+
+#PIP Installation
+python /data/get-pip.py
+
+#w1thermsensor mit PIP installieren --> in der requirements.txt enthalten und muss kopiert werden
+pip install -r "$reqFile"
+
+#confi.txt ergänzen
+if [ $(grep -c "dtoverlay=w1-gpio" "$configFile") == 0 ]; then
+	echo "dtoverlay=w1-gpio" >> "$configFile"
+fi
+if [ $(grep -c "gpiopin=4" "$configFile") == 0 ]; then
+    echo "gpiopin=4" >> "$configFile"
+fi
+
+#Datei w1-gpio.dtbo nach /u-boot/overlays kopieren
+updateActiveFile $pkgFileSets/w1-gpio.dtbo "$overlayFile"
+
+echo ----------------------------
+echo ----Installation beendet----
+echo ----------------------------
