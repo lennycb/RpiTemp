@@ -12,6 +12,7 @@ configFile="/u-boot/config.txt"
 overlayFile="/u-boot/overlays/w1-gpio.dtbo"
 reqFile="FileSets/requirements.txt"
 pluginFile="FileSets/plugins.txt"
+modulesFile="/etc/modules"
 
 source "/data/SetupHelper/CommonResources"
 
@@ -63,6 +64,17 @@ python /data/get-pip.py
 
 #w1thermsensor mit PIP installieren --> in der requirements.txt enthalten und muss kopiert werden
 pip install -r "$reqFile"
+
+#/etc/modules anpassen
+if [ $(grep -c "wire" "$modulesFile") == 0 ]; then
+	echo "wire" >> "$modulesFile"
+fi
+if [ $(grep -c "w1-gpio" "$modulesFile") == 0 ]; then
+	echo "w1-gpio" >> "$modulesFile"
+fi
+if [ $(grep -c "w1-therm" "$modulesFile") == 0 ]; then
+	echo "w1-therm" >> "$modulesFile"
+fi
 
 #confi.txt ergänzen
 if [ $(grep -c "dtoverlay=w1-gpio" "$configFile") == 0 ]; then
